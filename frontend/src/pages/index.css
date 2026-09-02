@@ -1,0 +1,44 @@
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.auth-form {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.auth-form input,
+.tasks-page input {
+  padding: 10px;
+}
+.auth-form button,
+.tasks-page button {
+  padding: 10px;
+  cursor: pointer;
+}
+
+.tasks-page {
+  max-width: 800px;
+  margin: 40px auto;
+}
+
+.tasks-page > div {
+  margin-bottom: 20px;
+}
+.loginout {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
