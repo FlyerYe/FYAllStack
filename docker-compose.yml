@@ -41,6 +41,9 @@ services:
 
     container_name: todo-backend
 
+    ports:
+    - "8000:8000"
+    
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_HOST: redis
