@@ -87,17 +87,39 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
-    payload = jwt.decode(
-        token,
-        settings.jwt_secret_key,
-        algorithms=[settings.jwt_algorithm],
-    )
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token 已过期",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="无效 Token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     user_id = payload.get("sub")
 
     if user_id is None:
         raise HTTPException(
             status_code=401,
             detail="无效 Token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return int(user_id)
+    try:
+        return int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=401,
+            detail="无效 Token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
