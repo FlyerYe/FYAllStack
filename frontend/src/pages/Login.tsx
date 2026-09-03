@@ -43,7 +43,7 @@ function Login() {
   return (
     <div className="auth-page">
       <form className="auth-form" onSubmit={handleSubmit}>
-        <h1>登录页3</h1>
+        <h1>登录</h1>
 
         <input
           value={username}
