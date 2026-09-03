@@ -1,24 +1,76 @@
-name: Deploy
-
+name: CI / CD
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-
-  deploy:
-
+  ci:
+    name: CI
     runs-on: ubuntu-latest
 
-
     steps:
-
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --locked
+
+      - name: Compile backend
+        working-directory: backend
+        run: uv run python -m compileall -q app
+
+  deploy:
+    name: CD
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Deploy to ECS
         uses: appleboy/ssh-action@v1
@@ -26,10 +78,8 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: root
           key: ${{ secrets.SERVER_KEY }}
-
           script: |
+            set -e
             cd /root/FYAllStack
-
-            git pull
-
+            git pull --ff-only
             docker compose up -d --build
