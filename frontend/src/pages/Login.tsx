@@ -3,6 +3,7 @@ import { useState, type SubmitEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import './index.css'
 import { login } from '../api/auth'
+import { getErrorMessage } from '../utils/error'
 
 function Login() {
   const [username, setUsername] = useState('')
@@ -32,9 +33,10 @@ function Login() {
       )
 
       navigate('/tasks')
-    } catch (error: any) {
-      console.error(error.response?.data?.message)
-      alert(error.response?.data?.detail || error.response?.data?.message || '登录失败1')
+    } catch (error: unknown) {
+      const message = getErrorMessage(error)
+      console.error(message)
+      alert(message)
     } finally {
       setLoading(false)
     }

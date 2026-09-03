@@ -2,6 +2,7 @@ import { useState, type SubmitEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import './index.css'
 import { register } from '../api/auth'
+import { getErrorMessage } from '../utils/error'
 
 function Register() {
   const [username, setUsername] = useState('')
@@ -23,10 +24,6 @@ function Register() {
       return
     }
 
-    console.log({
-      username,
-      password,
-    })
     try {
       setLoading(true)
 
@@ -37,8 +34,8 @@ function Register() {
 
       alert('注册成功')
       navigate('/login')
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '注册失败')
+    } catch (error: unknown) {
+      alert(getErrorMessage(error))
     } finally {
       setLoading(false)
     }

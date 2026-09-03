@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import './index.css'
 import { getTasks, createTask, updateTask, deleteTask, type Task } from '../api/tasks'
-
+import { useNavigate } from 'react-router-dom'
 
 function Tasks() {
     const [tasks, setTasks] = useState<Task[]>([])
     const [title, setTitle] = useState('')
     const [description, setDescription] = useState('')
+    const navigate = useNavigate()
 
     //   编辑状态
     const [editingId, setEditingId] = useState<number | null>(null)
@@ -15,7 +16,7 @@ function Tasks() {
     const [editStatus, setEditStatus] = useState('pending')
     const [loading, setLoading] = useState(false)
 
-    const getTaskList = async () => {
+    const getTaskList = useCallback(async () => {
         try {
             const response = await getTasks()
             setTasks(response.data)
@@ -25,7 +26,7 @@ function Tasks() {
         } finally {
             setLoading(false)
         }
-    }
+    },[])
     const handleCreateTask = async () => {
         if (!title.trim()) {
             return
@@ -86,15 +87,16 @@ function Tasks() {
     }
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         getTaskList()
-    }, [])
+    }, [getTaskList])
 
     return (
         <div className="tasks-page">
             <div className="loginout">
                 <button onClick={() => {
                     localStorage.removeItem('access_token')
-                    window.location.href = '/login'
+                    navigate('/login')
                 }}>
                     退出登录
                 </button>
