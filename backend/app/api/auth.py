@@ -8,10 +8,9 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 
-from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends
 from app.core.config import settings
 from app.exceptions import AppException
+from app.core.security import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 password_hash = PasswordHash.recommended()
@@ -49,9 +48,15 @@ def register(user: UserRegister):
         conn.close()
 
 
-def create_access_token(user_id: int):
-    expire = datetime.now(timezone.utc) + timedelta(minutes=60)
-    payload = {"sub": str(user_id) , "exp": expire}
+def create_access_token(user_id: int, role: str):
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.jwt_expire_minutes,
+    )
+    payload = {
+        "sub": str(user_id),
+        "role": role,
+        "exp": expire,
+    }
     encoded_jwt = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     return encoded_jwt
 
@@ -63,7 +68,7 @@ def login(user: LoginRequest):
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, username, password_hash
+                    SELECT id, username, password_hash, role
                     FROM users
                     WHERE username = %s
                     """,
@@ -73,53 +78,14 @@ def login(user: LoginRequest):
                 if not result:
                     # raise HTTPException(status_code=401, detail="用户名不存在")
                     raise AppException(message="用户名不存在", status_code=401)
-                user_id, username, password_hash_db = result
+                user_id, username, password_hash_db, role = result
                 if not password_hash.verify(user.password, password_hash_db):
                     raise AppException(message="密码错误", status_code=401)
-                access_token = create_access_token(user_id)
-                return {"access_token": access_token, "token_type": "bearer"}
+                access_token = create_access_token(user_id, role)
+                return {
+                    "access_token": access_token,
+                    "token_type": "bearer",
+                    "role": role,
+                }
     finally:
         conn.close()
-
-
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/api/auth/login"
-)
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
-        )
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token 已过期",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="无效 Token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user_id = payload.get("sub")
-
-    if user_id is None:
-        raise HTTPException(
-            status_code=401,
-            detail="无效 Token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    try:
-        return int(user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=401,
-            detail="无效 Token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )

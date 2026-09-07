@@ -1,0 +1,4 @@
+interface:
+  display_name: "菜谱与点餐系统实施"
+  short_description: "按设计方案逐阶段实现菜谱与点餐系统并完成实际验证和进度记录"
+  default_prompt: "使用 $recipe-order-system，仅执行当前 Phase，完成实际验证并更新项目进度。"

@@ -32,7 +32,7 @@ function Login() {
         response.data.access_token,
       )
 
-      navigate('/tasks')
+      navigate('/recipes')
     } catch (error: unknown) {
       const message = getErrorMessage(error)
       console.error(message)
