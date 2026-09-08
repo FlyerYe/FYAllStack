@@ -36,7 +36,10 @@
     缓存统一使用 JSON 和可配置 TTL（默认 60 秒）；Redis 读写异常或缓存损坏时回源数据库，不阻断业务接口。
     分类和菜谱新增、修改、删除会清理相关分类、菜谱列表和详情缓存；既有 Task 的 tasks:user:{user_id} 缓存键未改变。
     Phase 9 真实 Redis/PostgreSQL 集成测试、完整后端回归、前端 lint/build、编译、Compose 配置和 git diff --check 均已通过；项目缓存测试键已清理。
-    数据库迭代方案已补充：init.sql 仅作为新库 bootstrap，生产升级改用版本化 migration SQL、schema_migrations、checksum、事务和 advisory lock；现网迁移 runner 及 CI/CD 发布步骤尚未实施。
+    数据库迭代方案已补充：init.sql 仅作为新库 bootstrap，生产升级改用版本化 migration SQL、schema_migrations、checksum、事务和 advisory lock。
+    Phase 10 已完成迁移机制和 CI/CD 门禁实现：migrate 服务、V001 基线迁移、生产备份后迁移顺序、旧结构 CI fixture、重复执行验证和 checksum 漂移测试均已加入。
+    修复 migration runner 的事务边界：读取 schema_migrations 后显式提交隐式事务，确保每个 migration 的成功记录不会在连接关闭时回滚。
+    当前本机 Compose 数据库已实际执行 V001；schema_migrations 已记录 V001，既有 1 个用户保留且 role 已回填为 user，关键表和索引均存在；第二次执行输出 database migrations: up to date。
 - modified_files:
     - backend/app/api/auth.py
     - backend/app/api/tasks.py
@@ -89,6 +92,12 @@
     - recipe-order-system-design.md
     - .codex/skills/recipe-order-system/SKILL.md
     - recipe-order-system-progress.md
+    - backend/app/db/migrate.py
+    - backend/app/db/migrations/V001__baseline_existing_schema.sql
+    - backend/tests/test_migrations.py
+    - .github/workflows/deploy.yml
+    - docker-compose.yml
+    - recipe-order-system-design.md
 - database_sql: |
     ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20);
     UPDATE users SET role = 'user' WHERE role IS NULL;
@@ -160,6 +169,18 @@
     - backend/.venv/bin/python -c 'from app.main import app; ... app.openapi() ...'
     - npm run lint
     - npm run build
+    - UV_CACHE_DIR=/tmp/fuye-uv-cache uv run python -m unittest tests.test_migrations -v
+    - UV_CACHE_DIR=/tmp/fuye-uv-cache uv run python -m compileall -q app tests
+    - docker compose config --quiet
+    - docker compose up -d postgres redis
+    - docker compose run --rm migrate status
+    - docker compose run --rm migrate
+    - docker compose run --rm migrate
+    - 本机 PostgreSQL 只读检查 schema_migrations、users、关键表和索引
+    - UV_CACHE_DIR=/tmp/fuye-uv-cache uv run python -m unittest discover -s tests -p 'test_*.py' -v
+    - npm run lint
+    - npm run build
+    - docker compose build migrate backend（第一次因 PyPI jmespath 下载超时失败，第二次重试仍因依赖下载长时间无响应而中断）
     - UV_CACHE_DIR=/tmp/fuye-uv-cache uv run python -m unittest tests.test_orders -v
     - UV_CACHE_DIR=/tmp/fuye-uv-cache uv run python -m unittest discover -s tests -p 'test_*.py' -v
     - UV_CACHE_DIR=/tmp/fuye-uv-cache uv run python -m compileall -q app tests
@@ -239,6 +260,7 @@
     Phase 8 测试同样输出 Starlette 关于当前 httpx 兼容层的弃用警告，但不影响结果；未进行无关依赖升级。
     Phase 7 前端补齐后完整后端回归和前端 lint/build 已通过；当前环境无可用浏览器控制器，因此未进行截图级交互验证。
     Phase 9 Redis 不可用时采用回源数据库策略；缓存异常只记录 warning，不影响接口可用性。TestClient 仍有 Starlette/httpx 兼容层弃用警告，未进行无关依赖升级。
-    线上数据库迁移仍是 Phase 10 的未完成事项：当前尚未创建 migration runner 或执行任何生产迁移；init.sql 不会自动升级已有数据卷。
-- validation_result: passed
-- next_step: 用户明确要求继续后，重新读取 GitHub Actions、Dockerfile、Nginx、Compose、环境变量示例和前后端构建脚本，只执行 Phase 10：CI/CD 和部署兼容性最终验证；完成后才可将项目标记 complete。
+    本次未连接或执行未知远程生产数据库；生产迁移仍需在 ECS 执行备份、确认 PostgreSQL healthy、运行 docker compose run --rm migrate、检查 schema_migrations/关键结构后再发布应用。
+    本机 Compose 的 backend 镜像从零重建受 PyPI 网络下载超时影响，前端镜像构建成功；因此未完成本机 backend/frontend 全链路启动验证，Phase 10 暂不能标记 complete。
+- validation_result: failed
+- next_step: 在网络稳定或配置可用的 Python 包缓存后重新执行 docker compose build migrate backend，并完成 docker compose up -d --build backend frontend、服务健康检查和 API 冒烟测试；成功后再将 Phase 10 标记 complete。生产 ECS 发布前必须先备份数据库，且不能使用 docker compose down -v。

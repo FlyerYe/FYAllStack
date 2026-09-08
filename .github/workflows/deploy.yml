@@ -20,6 +20,36 @@ jobs:
     name: CI
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: todo
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: todo_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U todo -d todo_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://todo:ci-only-password@localhost:5432/todo_db
+      JWT_SECRET_KEY: ci-only-jwt-secret
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -58,6 +88,25 @@ jobs:
         working-directory: backend
         run: uv sync --locked
 
+      - name: Prepare legacy database fixture
+        run: >-
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "CREATE TABLE users (id SERIAL PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+          -c "CREATE TABLE tasks (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), title VARCHAR(200) NOT NULL, description TEXT, status VARCHAR(20) DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+          -c "INSERT INTO users (username, password_hash) VALUES ('ci-existing-user', 'ci-placeholder-hash')"
+
+      - name: Run database migrations
+        working-directory: backend
+        run: uv run python -m app.db.migrate
+
+      - name: Verify migrations are repeatable
+        working-directory: backend
+        run: uv run python -m app.db.migrate status && uv run python -m app.db.migrate
+
+      - name: Run backend tests
+        working-directory: backend
+        run: uv run python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Compile backend
         working-directory: backend
         run: uv run python -m compileall -q app
@@ -82,4 +131,10 @@ jobs:
             set -e
             cd /root/FYAllStack
             git pull --ff-only
-            docker compose up -d --build
+            docker compose build migrate backend
+            docker compose up -d --wait postgres redis
+            mkdir -p backups
+            backup_stamp="$(date +%Y%m%d%H%M%S)"
+            docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "backups/fyallstack-${backup_stamp}.sql"
+            docker compose run --rm migrate
+            docker compose up -d --build backend frontend

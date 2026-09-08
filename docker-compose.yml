@@ -35,6 +35,24 @@ services:
       retries: 5
 
 
+  migrate:
+    build:
+      context: ./backend
+
+    entrypoint: ["uv", "run", "python", "-m", "app.db.migrate"]
+    command: ["run"]
+
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    restart: "no"
+
+
   backend:
     build:
       context: ./backend
@@ -64,6 +82,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 
   frontend:

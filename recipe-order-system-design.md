@@ -1875,7 +1875,7 @@ docker compose up -d --build backend frontend
 推荐将迁移作为一次性 Compose job 或独立发布步骤：
 
 ```text
-docker compose run --rm backend python -m app.db.migrate
+docker compose run --rm migrate
 ```
 
 实际命令必须使用项目镜像内的依赖和生产环境变量。migration 成功前不能切换到依赖新结构的后端版本。
@@ -1885,12 +1885,25 @@ docker compose run --rm backend python -m app.db.migrate
 CI 必须至少验证：
 
 ```text
-空数据库执行全部 migrations 成功
+旧结构数据库执行全部 migrations 成功，并保留已有 users/tasks 数据
 同一批 migrations 第二次执行无变化
 已执行版本 checksum 被修改时失败
 任意 migration 失败时后续版本不执行
 应用测试数据库结构与生产基线一致
 ```
+
+仓库中的 CI 使用临时 PostgreSQL 和 Redis 服务，先创建不含 `users.role` 的旧版
+`users/tasks` 结构，再运行：
+
+```bash
+uv run python -m app.db.migrate
+uv run python -m app.db.migrate status
+uv run python -m app.db.migrate
+uv run python -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+CI 使用的数据库和密码仅用于流水线，不能复制到生产环境。checksum 漂移和失败即停
+应在后续新增 migration 测试中继续保持为发布门禁。
 
 CD 必须验证：
 
